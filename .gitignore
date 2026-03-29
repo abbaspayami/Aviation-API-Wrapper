@@ -1,0 +1,24 @@
+# Maven build output
+target/
+
+# Log files
+logs/
+
+# macOS metadata
+.DS_Store
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Claude Code internal files
+.claude/
+
+# Environment / secrets
+.env
+.env.*
+
+# Windows
+Thumbs.db

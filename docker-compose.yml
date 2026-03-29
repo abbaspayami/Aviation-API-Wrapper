@@ -1,0 +1,109 @@
+services:
+
+  # ── Shared Redis ──────────────────────────────────────────────────────────────
+  # Both app instances connect to this single Redis instance so that:
+  #   - Airport cache is shared   (instance-1 caches EGLL → instance-2 serves it)
+  #   - Rate limit counters are shared  (60 req/min per key, across the cluster)
+  redis:
+    image: redis:7-alpine
+    container_name: aviation-redis
+    ports:
+      - "6379:6379"           # exposed for local inspection: redis-cli ping
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── App instance 1 ───────────────────────────────────────────────────────────
+  aviation-api-wrapper-1:
+    build: .
+    container_name: aviation-api-wrapper-1
+    environment:
+      # Inside Docker, services reach each other by service name — not localhost.
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      # API keys — override via .env file or CI/CD secrets in production.
+      - SECURITY_API_KEYS=sporty-dev-key-abc123,sporty-dev-key-xyz789
+    volumes:
+      - ./logs/app1:/app/logs   # mount log directory so logs/app1/aviation.log is visible on host
+    depends_on:
+      redis:
+        condition: service_healthy   # wait for Redis to pass its health check
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
+             "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s             # Spring Boot needs ~15s to start
+
+  # ── App instance 2 ───────────────────────────────────────────────────────────
+  # Identical to instance 1. Both share the same image and the same Redis.
+  # If instance 1 goes down, Nginx routes all traffic to instance 2 — zero downtime.
+  aviation-api-wrapper-2:
+    build: .
+    container_name: aviation-api-wrapper-2
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SECURITY_API_KEYS=sporty-dev-key-abc123,sporty-dev-key-xyz789
+    volumes:
+      - ./logs/app2:/app/logs   # mount log directory so logs/app2/aviation.log is visible on host
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
+             "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Nginx load balancer ───────────────────────────────────────────────────────
+  # The ONLY service with a published port (80).
+  # App instances are NOT exposed directly — all external traffic goes through Nginx.
+  # Round-robin: request 1 → instance-1, request 2 → instance-2, and so on.
+  # Passive health check: if an instance fails 3 times, Nginx removes it from rotation.
+  nginx:
+    image: nginx:alpine
+    container_name: aviation-nginx
+    ports:
+      - "80:80"               # single public entry point for all clients
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      aviation-api-wrapper-1:
+        condition: service_healthy
+      aviation-api-wrapper-2:
+        condition: service_healthy
+
+  # ── Prometheus ────────────────────────────────────────────────────────────────
+  # Scrapes /actuator/prometheus from both app instances every 15 s.
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: aviation-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - aviation-api-wrapper-1
+      - aviation-api-wrapper-2
+
+  # ── Grafana ───────────────────────────────────────────────────────────────────
+  # Reads from Prometheus and provides dashboards.
+  # UI available at http://localhost:3000  (admin / admin)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: aviation-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus

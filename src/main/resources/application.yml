@@ -1,0 +1,242 @@
+spring:
+  application:
+    name: aviation-api-wrapper
+
+  data:
+    redis:
+      # Override in Docker / production via environment variables:
+      # SPRING_DATA_REDIS_HOST=redis   SPRING_DATA_REDIS_PORT=6379
+      host: localhost
+      port: 6379
+
+  cloud:
+    discovery:
+      enabled: false   # Feign uses explicit URLs — no service registry needed
+    openfeign:
+      client:
+        config:
+          # ── Primary API (Aviation Weather / NOAA) ─────────────────────────
+          # connect-timeout : ms to establish a TCP connection
+          # read-timeout    : ms to wait for the server to send a full response
+          # Single source of truth — no hardcoded Request.Options bean in FeignClientConfig.
+          default:
+            connect-timeout: 3000
+            read-timeout: 10000
+
+          # ── Provider 2 (AirportDB) ────────────────────────────────────────
+          # Shorter timeouts — we are already in the fallback path, fail fast.
+          # Single source of truth — no hardcoded Request.Options bean in AirportDbFeignClientConfig.
+          # "airport-db-api" must match the name = "airport-db-api" in @FeignClient.
+          airport-db-api:
+            connect-timeout: 2000
+            read-timeout: 5000
+
+server:
+  port: 8080
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API Key Authentication
+#   api-keys : comma-separated list of valid API keys.
+#              Callers must include one in the 'X-API-Key' header.
+#              NEVER commit real keys — override via environment variable:
+#              SECURITY_API_KEYS=your-real-key-1,your-real-key-2
+# ─────────────────────────────────────────────────────────────────────────────
+security:
+  api-keys: sporty-dev-key-abc123,sporty-dev-key-xyz789
+
+  # ── Rate Limiting (per API key, fixed window of 60 seconds) ─────────────
+  # requests-per-minute : max requests each API key may make per minute.
+  # Override: SECURITY_RATE_LIMIT_REQUESTS_PER_MINUTE=100
+  rate-limit:
+    requests-per-minute: 60
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Aviation — primary API + cache + fallback provider
+# ─────────────────────────────────────────────────────────────────────────────
+aviation:
+  api:
+    # Aviation Weather API (NOAA) — public, no API key required.
+    # Docs: https://aviationweather.gov/data/api/
+    base-url: https://aviationweather.gov/api/data
+
+  cache:
+    # How long each airport entry lives in Redis before expiring.
+    # The next request after expiry fetches fresh data and repopulates the cache.
+    # Override without redeployment: AVIATION_CACHE_TTL_MINUTES=5
+    ttl-minutes: 10
+
+  provider2:
+    # AirportDB.io — fallback when the primary API is unavailable.
+    # Register for a free token at https://airportdb.io
+    # Override via environment variable: AVIATION_PROVIDER2_API_TOKEN=your-token
+    base-url: https://airportdb.io/api/v1
+    api-token: YOUR_AIRPORTDB_TOKEN_HERE
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resilience4j
+# ─────────────────────────────────────────────────────────────────────────────
+resilience4j:
+
+  circuitbreaker:
+    # Aspect order — lower number = outer wrapper.
+    # CircuitBreaker(1) wraps Retry(2): when the circuit is OPEN the call is
+    # rejected immediately with no wasted retry attempts.
+    circuit-breaker-aspect-order: 1
+
+    instances:
+
+      # ── Primary API circuit breaker ──────────────────────────────────────
+      aviationApi:
+        # Required for /actuator/health to show CLOSED/OPEN/HALF_OPEN instead of UNKNOWN.
+        register-health-indicator: true
+
+        # Evaluate failure rate over the last 10 calls.
+        sliding-window-size: 10
+
+        # CRITICAL: do not open the circuit until at least 3 calls are recorded.
+        # Default is 10 (= sliding-window-size), which would allow 10 full failures
+        # before protecting anything. Setting to 3 means the CB opens after just
+        # 3 failed calls — preventing cascade failures from the very first requests.
+        minimum-number-of-calls: 3
+
+        # Open when 50 % or more of the last N calls failed.
+        failure-rate-threshold: 50
+
+        # Stay open (protecting) for 30 s, then move to HALF_OPEN.
+        wait-duration-in-open-state: 30s
+
+        # Allow 3 probe calls in HALF_OPEN before deciding to close or re-open.
+        permitted-number-of-calls-in-half-open-state: 3
+
+        # Automatically transition from OPEN → HALF_OPEN after the wait duration.
+        # No manual intervention needed.
+        automatic-transition-from-open-to-half-open-enabled: true
+
+        # These exceptions count as failures toward the failure rate.
+        record-exceptions:
+          - com.sporty.aviation.exception.AviationApiException
+          - java.io.IOException
+
+        # AirportNotFoundException is a valid business result (ICAO not found),
+        # not an infrastructure failure — do not penalise the CB for it.
+        ignore-exceptions:
+          - com.sporty.aviation.exception.AirportNotFoundException
+
+      # ── Provider 2 (fallback) circuit breaker ────────────────────────────
+      # More aggressive than primary — open faster, stay open longer.
+      # We have already spent time retrying the primary; fail fast in the fallback.
+      provider2Api:
+        # Required for /actuator/health to show CLOSED/OPEN/HALF_OPEN instead of UNKNOWN.
+        register-health-indicator: true
+
+        sliding-window-size: 5
+        minimum-number-of-calls: 2
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - com.sporty.aviation.exception.AviationApiException
+          - java.io.IOException
+        ignore-exceptions:
+          - com.sporty.aviation.exception.AirportNotFoundException
+
+  retry:
+    retry-aspect-order: 2
+
+    instances:
+
+      # ── Primary API retry ────────────────────────────────────────────────
+      aviationApi:
+        # 3 total attempts: 1 original + 2 retries.
+        max-attempts: 3
+
+        # Start with 1 s between attempts.
+        wait-duration: 1s
+
+        # Double the wait each time: 1 s → 2 s → 4 s.
+        # Backing off prevents hammering a struggling API.
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+
+        # Only retry on transient failures.
+        # Bug 3 fix: feign.RetryableException is thrown when the server is completely
+        # unreachable (connection refused, DNS failure). It extends RuntimeException,
+        # NOT IOException, so it must be listed explicitly — otherwise Resilience4j
+        # skips the retry chain entirely on a full connectivity failure.
+        retry-exceptions:
+          - com.sporty.aviation.exception.AviationApiException
+          - java.io.IOException
+          - feign.RetryableException
+
+        # Never retry on a valid "not found" — the result will not change.
+        ignore-exceptions:
+          - com.sporty.aviation.exception.AirportNotFoundException
+
+      # ── Provider 2 retry ─────────────────────────────────────────────────
+      # Fewer attempts than primary — we want a quick decision in the fallback path
+      # rather than stacking more wait time on top of the primary retries.
+      provider2Api:
+        max-attempts: 2
+        wait-duration: 1s
+        retry-exceptions:
+          - com.sporty.aviation.exception.AviationApiException
+          - java.io.IOException
+          - feign.RetryableException
+        ignore-exceptions:
+          - com.sporty.aviation.exception.AirportNotFoundException
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Spring Actuator
+#   GET /actuator/health          → overall status + circuit breaker states
+#   GET /actuator/circuitbreakers → detailed CB metrics (failure rate, call counts)
+#   GET /actuator/retries         → retry attempt statistics
+#   GET /actuator/prometheus      → Prometheus-format metrics (scraped by Prometheus)
+# ─────────────────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers,retries,caches,loggers,env
+  endpoint:
+    health:
+      show-details: always
+    env:
+      show-values: always
+  health:
+    circuitbreakers:
+      enabled: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SpringDoc / Swagger UI
+#   /swagger-ui.html   → interactive browser UI (Try-it-out, Authorize button)
+#   /v3/api-docs       → raw OpenAPI 3 JSON spec
+#   /v3/api-docs.yaml  → raw OpenAPI 3 YAML spec
+#
+#   Both paths are excluded from API key auth and rate limiting in
+#   ApiKeyAuthFilter and RateLimitFilter so they are always accessible.
+# ─────────────────────────────────────────────────────────────────────────────
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logging
+#   Bug 4 fix: include [correlationId] in every log line via MDC.
+#   CorrelationIdFilter (Order 0) injects the ID from the X-Correlation-ID
+#   request header (or generates a UUID) and stores it in MDC before any
+#   other filter or handler runs. The ":-no-id" suffix is the default value
+#   shown when MDC is empty (e.g. background threads, startup logs).
+#
+#   Example log line:
+#   2026-03-23 10:30:00 [a1b2c3d4-...] INFO  c.s.a.s.i.AirportServiceImpl - Cache miss ...
+# ─────────────────────────────────────────────────────────────────────────────
+logging:
+  file:
+    name: logs/aviation.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%X{correlationId:-no-id}] %-5level %logger{36} - %msg%n"
+    file:    "%d{yyyy-MM-dd HH:mm:ss} [%X{correlationId:-no-id}] %-5level %logger{36} - %msg%n"
