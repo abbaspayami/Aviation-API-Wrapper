@@ -36,7 +36,7 @@ import java.util.List;
 @FeignClient(
         name            = "aviation-weather-api",
         url             = "${aviation.api.base-url}",
-        configuration   = FeignClientConfig.class
+        configuration   = AviationWeatherFeignClientConfig.class
 )
 public interface AviationWeatherFeignClient {
 

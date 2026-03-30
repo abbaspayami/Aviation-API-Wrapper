@@ -10,7 +10,7 @@ import lombok.Value;
  * Clean, minimised airport response returned to API callers.
  *
  * <p>This is the <strong>only</strong> DTO that ever leaves the service boundary.
- * The raw upstream DTOs ({@link AviationWeatherAirportDto}, {@link Provider2AirportDto})
+ * The raw upstream DTOs ({@link AviationWeatherAirportDto}, {@link AirportDBDto})
  * stay internal — they are implementation details that callers should never depend on.
  *
  * <p>Mapping from the internal representation is done via the single factory method

@@ -66,9 +66,6 @@ public class AirportServiceImpl implements AirportService {
     public AirportResponse getAirportByIcao(String icaoCode) {
         log.info("Cache miss — fetching from primary API (aviationweather.gov) for ICAO: {}", icaoCode);
 
-        // Bug 1 fix: normalise to uppercase before sending to the external API.
-        // The cache key already uses #icaoCode.toUpperCase() via @Cacheable, so
-        // "egll" and "EGLL" hit the same cache entry — the API call must match.
         AviationWeatherAirportDto raw = aviationWeatherFeignClient
                 .getAirportByIcao(icaoCode.toUpperCase())
                 .stream()

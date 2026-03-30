@@ -2,7 +2,7 @@ package com.sporty.aviation.service;
 
 import com.sporty.aviation.client.AirportDbFeignClient;
 import com.sporty.aviation.dto.AviationWeatherAirportDto;
-import com.sporty.aviation.dto.Provider2AirportDto;
+import com.sporty.aviation.dto.AirportDBDto;
 import com.sporty.aviation.exception.AviationApiException;
 import com.sporty.aviation.service.impl.Provider2AirportService;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,7 @@ import static org.mockito.Mockito.when;
  *  1. Successful response from Provider 2 is mapped correctly to AviationWeatherAirportDto.
  *  2. Provider 2 failure propagates as AviationApiException.
  *  3. Null coordinates are handled without exceptions.
- * Note: coordinates are typed as Double in Provider2AirportDto (the AirportDB API
+ * Note: coordinates are typed as Double in AirportDBDto (the AirportDB API
  * returns latitude_deg and longitude_deg as JSON numbers, not strings).
  */
 @ExtendWith(MockitoExtension.class)
@@ -62,7 +62,7 @@ class Provider2AirportServiceTest {
 
     @Test
     void getAirportByIcao_nullCoordinates_doesNotThrow() {
-        Provider2AirportDto dto = buildEgllDto();
+        AirportDBDto dto = buildEgllDto();
         dto.setLatitudeDeg(null);
         dto.setLongitudeDeg(null);
 
@@ -78,8 +78,8 @@ class Provider2AirportServiceTest {
     // Test data builder
     // -------------------------------------------------------------------------
 
-    private Provider2AirportDto buildEgllDto() {
-        Provider2AirportDto dto = new Provider2AirportDto();
+    private AirportDBDto buildEgllDto() {
+        AirportDBDto dto = new AirportDBDto();
         dto.setIcao("EGLL");
         dto.setIata("LHR");
         dto.setName("London Heathrow Airport");

@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 /**
- * Maps the raw JSON response from Provider 2 — AirportDB.io.
+ * Maps the raw JSON response from AirportDB.io (the fallback provider).
  *
  * <p>Example API call:
  * <pre>
@@ -21,12 +21,12 @@ import lombok.Data;
  * serialised to the caller. The public response is always {@link AirportResponse}.
  */
 @Schema(
-    description = "Raw airport data returned by Provider 2 (AirportDB.io). "
+    description = "Raw airport data returned by AirportDB.io. "
                 + "Internal DTO only — never exposed to API callers directly."
 )
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Provider2AirportDto {
+public class AirportDBDto {
 
     @Schema(description = "ICAO airport identifier.", example = "EGLL")
     @JsonProperty("icao_code")

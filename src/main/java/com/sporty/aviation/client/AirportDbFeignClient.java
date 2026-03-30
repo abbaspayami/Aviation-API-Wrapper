@@ -1,6 +1,6 @@
 package com.sporty.aviation.client;
 
-import com.sporty.aviation.dto.Provider2AirportDto;
+import com.sporty.aviation.dto.AirportDBDto;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,5 +40,5 @@ public interface AirportDbFeignClient {
      * @return the airport details from AirportDB
      */
     @GetMapping("/airport/{icao}")
-    Provider2AirportDto getAirportByIcao(@PathVariable("icao") String icao);
+    AirportDBDto getAirportByIcao(@PathVariable("icao") String icao);
 }

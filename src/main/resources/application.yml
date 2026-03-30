@@ -18,7 +18,7 @@ spring:
           # ── Primary API (Aviation Weather / NOAA) ─────────────────────────
           # connect-timeout : ms to establish a TCP connection
           # read-timeout    : ms to wait for the server to send a full response
-          # Single source of truth — no hardcoded Request.Options bean in FeignClientConfig.
+          # Single source of truth — no hardcoded Request.Options bean in AviationWeatherFeignClientConfig.
           default:
             connect-timeout: 3000
             read-timeout: 10000

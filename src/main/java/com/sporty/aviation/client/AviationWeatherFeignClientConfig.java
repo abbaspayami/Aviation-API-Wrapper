@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Feign client configuration shared by all {@code @FeignClient} beans in this package.
+ * Feign client configuration scoped exclusively to {@link AviationWeatherFeignClient}.
  *
  * <p>Registers two beans:
  * <ul>
@@ -22,9 +22,11 @@ import org.springframework.context.annotation.Configuration;
  * <p>Timeouts (connect: 3s, read: 10s) are configured in {@code application.yml}
  * under {@code spring.cloud.openfeign.client.config.default} — no hardcoded
  * {@code Request.Options} bean is needed here.
+ *
+ * @see AirportDbFeignClientConfig for the equivalent config used by the fallback client
  */
 @Configuration
-public class FeignClientConfig {
+public class AviationWeatherFeignClientConfig {
 
     /**
      * Sets the Feign log level to BASIC so request/response summaries appear

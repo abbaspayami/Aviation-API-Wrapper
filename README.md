@@ -48,7 +48,7 @@ src/
 │   ├── AviationApplication.java
 │   ├── client/
 │   │   ├── AviationWeatherFeignClient.java     # Primary Feign client → aviationweather.gov
-│   │   ├── FeignClientConfig.java              # Primary client: timeout, logging, error decoder
+│   │   ├── AviationWeatherFeignClientConfig.java # Primary client: timeout, logging, error decoder
 │   │   ├── AirportDbFeignClient.java           # Fallback Feign client → airportdb.io (Provider 2)
 │   │   └── AirportDbFeignClientConfig.java     # Provider 2: shorter timeout, API token interceptor
 │   ├── config/
@@ -60,7 +60,7 @@ src/
 │   ├── dto/
 │   │   ├── AirportResponse.java                # Clean public response (icao, iata, name, city, …)
 │   │   ├── AviationWeatherAirportDto.java      # Internal: raw Aviation Weather API response
-│   │   ├── Provider2AirportDto.java            # Internal: raw AirportDB (Provider 2) response
+│   │   ├── AirportDBDto.java                   # Internal: raw AirportDB response
 │   │   └── ErrorResponse.java                  # Uniform error body returned on all failures
 │   ├── exception/
 │   │   ├── AirportNotFoundException.java       # Thrown when ICAO code returns no results → 404
@@ -179,7 +179,7 @@ Both providers fail → 502 / 503 from GlobalExceptionHandler
 ## 3. Response Format
 
 The API always returns a clean, documented `AirportResponse` object.
-The raw upstream DTOs (`AviationWeatherAirportDto`, `Provider2AirportDto`) stay
+The raw upstream DTOs (`AviationWeatherAirportDto`, `AirportDBDto`) stay
 **internal only** — callers never depend on raw upstream field names.
 
 ### Success — `200 OK`
@@ -901,7 +901,7 @@ The following assumptions were made during design and implementation:
 
 ### 16.1 Clean response DTO — `AirportResponse`
 
-The raw upstream DTOs (`AviationWeatherAirportDto`, `Provider2AirportDto`) stay internal.
+The raw upstream DTOs (`AviationWeatherAirportDto`, `AirportDBDto`) stay internal.
 The API always returns `AirportResponse` with clean, self-describing field names.
 The static factory method `AirportResponse.from(rawDto)` is the **single mapping point** —
 any upstream field renames are isolated there.

@@ -2,7 +2,7 @@ package com.sporty.aviation.service.impl;
 
 import com.sporty.aviation.client.AirportDbFeignClient;
 import com.sporty.aviation.dto.AviationWeatherAirportDto;
-import com.sporty.aviation.dto.Provider2AirportDto;
+import com.sporty.aviation.dto.AirportDBDto;
 import com.sporty.aviation.service.FallbackAirportService;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
@@ -50,7 +50,7 @@ public class Provider2AirportService implements FallbackAirportService {
     public AviationWeatherAirportDto getAirportByIcao(String icaoCode) {
         log.info("Fetching from Provider 2 (AirportDB) for ICAO: {}", icaoCode);
 
-        Provider2AirportDto dto = airportDbFeignClient.getAirportByIcao(icaoCode);
+        AirportDBDto dto = airportDbFeignClient.getAirportByIcao(icaoCode);
         return mapToAviationDto(dto);
     }
 
@@ -60,7 +60,7 @@ public class Provider2AirportService implements FallbackAirportService {
      * <p>Both providers describe the same real-world airport so we populate the
      * same DTO fields — callers never need to know which provider served the data.
      */
-    private AviationWeatherAirportDto mapToAviationDto(Provider2AirportDto dto) {
+    private AviationWeatherAirportDto mapToAviationDto(AirportDBDto dto) {
         AviationWeatherAirportDto result = new AviationWeatherAirportDto();
         result.setIcaoId(dto.getIcao());
         result.setIataId(dto.getIata());

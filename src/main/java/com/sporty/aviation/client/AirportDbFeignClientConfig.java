@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Bean;
  * <p>Intentionally NOT annotated with {@code @Configuration}.
  * When Feign sees {@code configuration = AirportDbFeignClientConfig.class},
  * it creates a child ApplicationContext for AirportDB only — so the beans
- * defined here do NOT conflict with {@link FeignClientConfig} beans used
+ * defined here do NOT conflict with {@link AviationWeatherFeignClientConfig} beans used
  * by the primary Aviation Weather client.
  *
  * <p>Key differences from the primary client config:
