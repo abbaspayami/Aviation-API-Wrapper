@@ -4,6 +4,7 @@ import com.sporty.aviation.client.AirportDbFeignClient;
 import com.sporty.aviation.dto.AviationWeatherAirportDto;
 import com.sporty.aviation.dto.Provider2AirportDto;
 import com.sporty.aviation.exception.AviationApiException;
+import com.sporty.aviation.service.impl.Provider2AirportService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,12 +17,12 @@ import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for Provider2AirportService (AirportDB fallback).
- *
  * Verifies:
  *  1. Successful response from Provider 2 is mapped correctly to AviationWeatherAirportDto.
  *  2. Provider 2 failure propagates as AviationApiException.
- *  3. Coordinate strings are parsed to Double correctly.
- *  4. Null/blank coordinates are handled without exceptions.
+ *  3. Null coordinates are handled without exceptions.
+ * Note: coordinates are typed as Double in Provider2AirportDto (the AirportDB API
+ * returns latitude_deg and longitude_deg as JSON numbers, not strings).
  */
 @ExtendWith(MockitoExtension.class)
 class Provider2AirportServiceTest {
@@ -40,7 +41,7 @@ class Provider2AirportServiceTest {
 
         assertThat(result.getIcaoId()).isEqualTo("EGLL");
         assertThat(result.getIataId()).isEqualTo("LHR");
-        assertThat(result.getName()).isEqualTo("Heathrow Airport");
+        assertThat(result.getName()).isEqualTo("London Heathrow Airport");
         assertThat(result.getCountry()).isEqualTo("GB");
         assertThat(result.getState()).isEqualTo("GB-ENG");
         assertThat(result.getLat()).isEqualTo(51.4775);
@@ -73,18 +74,6 @@ class Provider2AirportServiceTest {
         assertThat(result.getLon()).isNull();
     }
 
-    @Test
-    void getAirportByIcao_invalidCoordinateString_returnsNull() {
-        Provider2AirportDto dto = buildEgllDto();
-        dto.setLatitudeDeg("not-a-number");
-
-        when(airportDbFeignClient.getAirportByIcao("EGLL")).thenReturn(dto);
-
-        AviationWeatherAirportDto result = provider2AirportService.getAirportByIcao("EGLL");
-
-        assertThat(result.getLat()).isNull();
-    }
-
     // -------------------------------------------------------------------------
     // Test data builder
     // -------------------------------------------------------------------------
@@ -93,10 +82,10 @@ class Provider2AirportServiceTest {
         Provider2AirportDto dto = new Provider2AirportDto();
         dto.setIcao("EGLL");
         dto.setIata("LHR");
-        dto.setName("Heathrow Airport");
+        dto.setName("London Heathrow Airport");
         dto.setType("large_airport");
-        dto.setLatitudeDeg("51.4775");
-        dto.setLongitudeDeg("-0.461389");
+        dto.setLatitudeDeg(51.4775);       // Double — API returns a JSON number
+        dto.setLongitudeDeg(-0.461389);    // Double — API returns a JSON number
         dto.setElevationFt(83);
         dto.setIsoCountry("GB");
         dto.setIsoRegion("GB-ENG");

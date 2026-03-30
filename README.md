@@ -462,9 +462,19 @@ Primary CB OPEN → fetchFromProvider2()
 ```
 
 **Setup for Provider 2:**
-Register for a free token at [airportdb.io](https://airportdb.io), then:
+The token is read from the `AVIATION_PROVIDER2_API_TOKEN` environment variable — never hardcoded.
+Register for a free token at [airportdb.io](https://airportdb.io), then set it before starting the app:
 ```bash
-AVIATION_PROVIDER2_API_TOKEN=your_token ./mvnw spring-boot:run
+# Option A — inline (one-time run)
+AVIATION_PROVIDER2_API_TOKEN=your_token_here ./mvnw spring-boot:run
+
+# Option B — export in your terminal session
+export AVIATION_PROVIDER2_API_TOKEN=your_token_here
+./mvnw spring-boot:run
+
+# Option C — .env file (gitignored, safe for secrets)
+echo "AVIATION_PROVIDER2_API_TOKEN=your_token_here" >> .env
+docker-compose up   # Docker Compose reads .env automatically
 ```
 
 ---
@@ -795,7 +805,7 @@ aviation:
     ttl-minutes: 10                                       # override: AVIATION_CACHE_TTL_MINUTES
   provider2:
     base-url: https://airportdb.io/api/v1
-    api-token: YOUR_AIRPORTDB_TOKEN_HERE                  # override: AVIATION_PROVIDER2_API_TOKEN
+    api-token: ${AVIATION_PROVIDER2_API_TOKEN:}           # NEVER hardcode — set via env variable
 
 resilience4j:
   circuitbreaker:

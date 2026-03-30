@@ -21,7 +21,6 @@ import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for AirportServiceImpl — primary API path only.
- *
  * Resilience4j annotations (@CircuitBreaker, @Retry) are Spring AOP proxies
  * and do NOT activate in plain unit tests. Fallback and resilience behaviour
  * is verified separately in Provider2AirportServiceTest and integration tests.
@@ -31,11 +30,6 @@ class AirportServiceTest {
 
     @Mock
     private AviationWeatherFeignClient aviationWeatherFeignClient;
-
-    // Required because AirportServiceImpl now has two final fields.
-    // Not used in these tests — fallback wiring is tested in Provider2AirportServiceTest.
-    @Mock
-    private Provider2AirportService provider2AirportService;
 
     @InjectMocks
     private AirportServiceImpl airportService;

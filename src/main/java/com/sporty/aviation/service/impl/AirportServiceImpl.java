@@ -85,7 +85,7 @@ public class AirportServiceImpl implements AirportService {
     // Provider 2 response is stored in Redis and future calls are served from
     // cache without hitting either provider again until TTL expires.
     // -----------------------------------------------------------------------
-    private AirportResponse fetchFromProvider2(String icaoCode, Throwable cause) {
+    AirportResponse fetchFromProvider2(String icaoCode, Throwable cause) {
         log.warn("Primary API unavailable [{}] — routing to Provider 2 (AirportDB) for ICAO: {}",
                 cause.getClass().getSimpleName(), icaoCode);
 

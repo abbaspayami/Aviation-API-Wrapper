@@ -29,12 +29,14 @@ import lombok.Data;
 public class Provider2AirportDto {
 
     @Schema(description = "ICAO airport identifier.", example = "EGLL")
+    @JsonProperty("icao_code")
     private String icao;
 
     @Schema(description = "IATA airport code used by airlines and passengers.", example = "LHR")
+    @JsonProperty("iata_code")
     private String iata;
 
-    @Schema(description = "Full official airport name.", example = "Heathrow Airport")
+    @Schema(description = "Full official airport name.", example = "London Heathrow Airport")
     private String name;
 
     @Schema(
@@ -45,15 +47,15 @@ public class Provider2AirportDto {
     )
     private String type;
 
-    @Schema(description = "Latitude in decimal degrees as a string (WGS-84).", example = "51.4775")
+    @Schema(description = "Latitude in decimal degrees (WGS-84). Returned as a JSON number by the API.", example = "51.4706")
     @JsonProperty("latitude_deg")
-    private String latitudeDeg;
+    private Double latitudeDeg;
 
-    @Schema(description = "Longitude in decimal degrees as a string (WGS-84).", example = "-0.461389")
+    @Schema(description = "Longitude in decimal degrees (WGS-84). Returned as a JSON number by the API.", example = "-0.461941")
     @JsonProperty("longitude_deg")
-    private String longitudeDeg;
+    private Double longitudeDeg;
 
-    @Schema(description = "Elevation above mean sea level in feet.", example = "83")
+    @Schema(description = "Elevation above mean sea level in feet. Returned as a quoted string by the API.", example = "83")
     @JsonProperty("elevation_ft")
     private Integer elevationFt;
 

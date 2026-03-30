@@ -68,9 +68,9 @@ aviation:
   provider2:
     # AirportDB.io — fallback when the primary API is unavailable.
     # Register for a free token at https://airportdb.io
-    # Override via environment variable: AVIATION_PROVIDER2_API_TOKEN=your-token
+    # Set the token via environment variable: AVIATION_PROVIDER2_API_TOKEN=<your-token>
     base-url: https://airportdb.io/api/v1
-    api-token: YOUR_AIRPORTDB_TOKEN_HERE
+    api-token: ${AVIATION_PROVIDER2_API_TOKEN:}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Resilience4j

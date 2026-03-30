@@ -68,20 +68,10 @@ public class Provider2AirportService implements FallbackAirportService {
         result.setMunicipality(dto.getMunicipality());   // city — only available from Provider 2
         result.setCountry(dto.getIsoCountry());
         result.setState(dto.getIsoRegion());
-        result.setLat(parseDoubleSafe(dto.getLatitudeDeg()));
-        result.setLon(parseDoubleSafe(dto.getLongitudeDeg()));
+        result.setLat(dto.getLatitudeDeg());
+        result.setLon(dto.getLongitudeDeg());
         result.setElev(dto.getElevationFt());
         result.setType(dto.getType());
         return result;
-    }
-
-    private Double parseDoubleSafe(String value) {
-        if (value == null || value.isBlank()) return null;
-        try {
-            return Double.parseDouble(value.trim());
-        } catch (NumberFormatException e) {
-            log.warn("Could not parse coordinate value: '{}'", value);
-            return null;
-        }
     }
 }
