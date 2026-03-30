@@ -1,6 +1,7 @@
 package com.sporty.aviation.client;
 
 import com.sporty.aviation.exception.AviationApiException;
+import com.sporty.aviation.exception.AviationClientException;
 import feign.Logger;
 import feign.Response;
 import feign.codec.ErrorDecoder;
@@ -58,25 +59,42 @@ public class FeignClientConfig {
 
     static class AviationErrorDecoder implements ErrorDecoder {
 
+        /**
+         * Maps HTTP status codes to typed exceptions.
+         *
+         * <p><b>4xx → {@link AviationClientException}</b> (not retried)<br>
+         * These are permanent errors: a bad request, a wrong URL, or a rate-limit
+         * hit. Retrying will not change the result, so the Retry aspect ignores
+         * this exception type via {@code ignore-exceptions} in application.yml.
+         *
+         * <p><b>5xx → {@link AviationApiException}</b> (retried + counted by CB)<br>
+         * These are transient server-side failures. The Retry aspect will attempt
+         * up to 3 calls with exponential back-off before giving up.
+         */
         @Override
         public Exception decode(String methodKey, Response response) {
             int status = response.status();
 
             return switch (status) {
-                case 400 -> new AviationApiException(
+                // 4xx — permanent client errors, do NOT retry
+                case 400 -> new AviationClientException(
                         "Bad request sent to Aviation Weather API (HTTP 400). " +
-                        "Check the ICAO code format.");
-                case 404 -> new AviationApiException(
+                        "Check the ICAO code format.", status);
+                case 404 -> new AviationClientException(
                         "Aviation Weather API endpoint not found (HTTP 404). " +
-                        "The API URL may have changed.");
-                case 429 -> new AviationApiException(
+                        "The API URL may have changed.", status);
+                case 429 -> new AviationClientException(
                         "Aviation Weather API rate limit exceeded (HTTP 429). " +
-                        "Please slow down requests.");
+                        "Please slow down requests.", status);
+                // 5xx — transient server errors, retry is worthwhile
                 case 500, 502, 503 -> new AviationApiException(
                         "Aviation Weather API is temporarily unavailable (HTTP " + status + "). " +
                         "Please try again later.");
-                default  -> new AviationApiException(
-                        "Unexpected response from Aviation Weather API (HTTP " + status + ").");
+                default -> status >= 400 && status < 500
+                        ? new AviationClientException(
+                                "Unexpected client error from Aviation Weather API (HTTP " + status + ").", status)
+                        : new AviationApiException(
+                                "Unexpected server error from Aviation Weather API (HTTP " + status + ").");
             };
         }
     }

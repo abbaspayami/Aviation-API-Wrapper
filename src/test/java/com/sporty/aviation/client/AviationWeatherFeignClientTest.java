@@ -4,6 +4,7 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.sporty.aviation.dto.AviationWeatherAirportDto;
 import com.sporty.aviation.exception.AviationApiException;
+import com.sporty.aviation.exception.AviationClientException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -139,12 +140,23 @@ class AviationWeatherFeignClientTest {
     }
 
     @Test
-    void getAirportByIcao_apiReturns429_throwsRateLimitException() {
+    void getAirportByIcao_apiReturns429_throwsAviationClientException() {
         wireMock.stubFor(get(urlPathEqualTo("/airport"))
                 .willReturn(aResponse().withStatus(429)));
 
         assertThatThrownBy(() -> feignClient.getAirportByIcao("KJFK"))
-                .isInstanceOf(AviationApiException.class)
+                .isInstanceOf(AviationClientException.class)
                 .hasMessageContaining("rate limit");
+    }
+
+    @Test
+    void getAirportByIcao_apiReturns404_throwsAviationClientException() {
+        // 404 is a permanent client error → AviationClientException, never retried.
+        wireMock.stubFor(get(urlPathEqualTo("/airport"))
+                .willReturn(aResponse().withStatus(404)));
+
+        assertThatThrownBy(() -> feignClient.getAirportByIcao("KJFK"))
+                .isInstanceOf(AviationClientException.class)
+                .hasMessageContaining("not found");
     }
 }

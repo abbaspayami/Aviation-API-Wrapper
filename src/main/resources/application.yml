@@ -117,10 +117,14 @@ resilience4j:
           - com.sporty.aviation.exception.AviationApiException
           - java.io.IOException
 
-        # AirportNotFoundException is a valid business result (ICAO not found),
-        # not an infrastructure failure — do not penalise the CB for it.
+        # These exceptions are NOT infrastructure failures — do not penalise the CB.
+        #   AirportNotFoundException : valid "not found" business result
+        #   AviationClientException  : permanent 4xx (e.g. 404 endpoint moved, 429 rate-limit);
+        #                              a 404 does not mean the API is down — the circuit
+        #                              must not open just because a URL changed.
         ignore-exceptions:
           - com.sporty.aviation.exception.AirportNotFoundException
+          - com.sporty.aviation.exception.AviationClientException
 
       # ── Provider 2 (fallback) circuit breaker ────────────────────────────
       # More aggressive than primary — open faster, stay open longer.
@@ -140,6 +144,7 @@ resilience4j:
           - java.io.IOException
         ignore-exceptions:
           - com.sporty.aviation.exception.AirportNotFoundException
+          - com.sporty.aviation.exception.AviationClientException
 
   retry:
     retry-aspect-order: 2
@@ -169,9 +174,14 @@ resilience4j:
           - java.io.IOException
           - feign.RetryableException
 
-        # Never retry on a valid "not found" — the result will not change.
+        # Never retry on these — the result will not change on a second attempt.
+        #   AirportNotFoundException  : valid "not found" business result
+        #   AviationClientException   : permanent 4xx from upstream (400/404/429);
+        #                               retrying a 404 wastes 7 s (1s+2s+4s backoff)
+        #                               and will never produce a different answer.
         ignore-exceptions:
           - com.sporty.aviation.exception.AirportNotFoundException
+          - com.sporty.aviation.exception.AviationClientException
 
       # ── Provider 2 retry ─────────────────────────────────────────────────
       # Fewer attempts than primary — we want a quick decision in the fallback path
@@ -185,6 +195,7 @@ resilience4j:
           - feign.RetryableException
         ignore-exceptions:
           - com.sporty.aviation.exception.AirportNotFoundException
+          - com.sporty.aviation.exception.AviationClientException
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Spring Actuator

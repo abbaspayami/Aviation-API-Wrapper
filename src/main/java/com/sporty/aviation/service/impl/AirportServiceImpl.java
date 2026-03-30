@@ -39,6 +39,9 @@ public class AirportServiceImpl implements AirportService {
      *
      *  3. @Retry           — on a transient failure from the primary API,
      *                        retry up to 3 times with exponential backoff: 1s → 2s → 4s.
+     *                        Only AviationApiException (5xx) and IOException are retried.
+     *                        AviationClientException (4xx) is NOT retried — a 404 or 429
+     *                        will not change on a second attempt.
      *                        After all retries fail the exception bubbles up to
      *                        the Circuit Breaker, which records it as a failure.
      *
