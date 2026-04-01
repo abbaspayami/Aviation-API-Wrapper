@@ -136,17 +136,22 @@ class AviationWeatherFeignClientTest {
 
         assertThatThrownBy(() -> feignClient.getAirportByIcao("KJFK"))
                 .isInstanceOf(AviationApiException.class)
-                .hasMessageContaining("temporarily unavailable");
+                // AviationErrorDecoder case 500: "...encountered an internal error (HTTP 500)..."
+                .hasMessageContaining("internal error")
+                .hasMessageContaining("try again later");
     }
 
     @Test
-    void getAirportByIcao_apiReturns429_throwsAviationClientException() {
+    void getAirportByIcao_apiReturnsUnexpected4xx_throwsAviationClientException() {
+        // 429 has no dedicated case in AviationErrorDecoder — it falls through to the
+        // default 4xx arm: "unexpected client error (HTTP 429)".
+        // This confirms that any unexpected 4xx is treated as a permanent client error.
         wireMock.stubFor(get(urlPathEqualTo("/airport"))
                 .willReturn(aResponse().withStatus(429)));
 
         assertThatThrownBy(() -> feignClient.getAirportByIcao("KJFK"))
                 .isInstanceOf(AviationClientException.class)
-                .hasMessageContaining("rate limit");
+                .hasMessageContaining("unexpected client error");
     }
 
     @Test

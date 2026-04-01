@@ -1,7 +1,5 @@
 package com.sporty.aviation.client;
 
-import com.sporty.aviation.exception.AviationApiException;
-import com.sporty.aviation.exception.AviationClientException;
 import feign.Logger;
 import feign.RequestInterceptor;
 import feign.codec.ErrorDecoder;
@@ -49,19 +47,13 @@ public class AirportDbFeignClientConfig {
     /**
      * Converts AirportDB non-2xx responses into typed exceptions.
      *
-     * <p>4xx responses (e.g. 404 airport not found, 401 bad token) throw
-     * {@link AviationClientException} — these are permanent errors and must
-     * NOT be retried. 5xx responses throw {@link AviationApiException} and
-     * are eligible for retry under the "provider2Api" Resilience4j instance.
+     * <p>Uses the shared {@link AviationErrorDecoder} with the provider name
+     * "AirportDB" so that 4xx responses throw {@link com.sporty.aviation.exception.AviationClientException}
+     * (never retried) and 5xx responses throw {@link com.sporty.aviation.exception.AviationApiException}
+     * (eligible for retry under the "provider2Api" Resilience4j instance).
      */
     @Bean
     public ErrorDecoder provider2ErrorDecoder() {
-        return (methodKey, response) -> {
-            int status = response.status();
-            String msg = "Provider 2 (AirportDB) returned HTTP " + status + ". ";
-            return (status >= 400 && status < 500)
-                    ? new AviationClientException(msg + "Not retrying — client-side error.", status)
-                    : new AviationApiException(msg + "Upstream may be degraded.");
-        };
+        return new AviationErrorDecoder("AirportDB");
     }
 }

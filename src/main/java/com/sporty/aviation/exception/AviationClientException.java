@@ -5,24 +5,27 @@ import lombok.Getter;
 /**
  * Thrown when an upstream API returns a 4xx HTTP response.
  *
- * <p>Extends {@link AviationApiException} so the {@code GlobalExceptionHandler}
- * and circuit breaker can still catch it via the parent type when needed.
+ * <ul>
+ *   <li>{@link AviationApiException} — 5xx server error: transient, worth retrying.</li>
+ *   <li>{@code AviationClientException} — 4xx client error: permanent, retrying
+ *       will never produce a different result.</li>
+ * </ul>
  *
- * <p>Unlike {@link AviationApiException} (which covers transient 5xx failures),
- * this exception represents a <em>permanent</em> client-side error — the request
- * is malformed, the endpoint is wrong, or the resource does not exist.
- * Retrying will not change the outcome, so it is listed in {@code ignore-exceptions}
- * for every Resilience4j Retry instance.
+ * <p>Keeping them as sibling types (both rooted at {@link RuntimeException}) makes
+ * the retry boundary <em>structurally enforced by the type system</em>:
+ * {@code retry-exceptions: [AviationApiException]} can never accidentally match a
+ * 4xx response because {@code AviationClientException} is not a subtype of
+ * {@code AviationApiException}. No {@code ignore-exceptions} entry is needed to
+ * guard against it — the hierarchy prevents it outright.
  *
  * <p>Examples:
  * <ul>
  *   <li>400 Bad Request — invalid query parameter sent to the upstream API</li>
  *   <li>404 Not Found   — the API endpoint URL has changed</li>
- *   <li>429 Too Many Requests — rate limit hit; backing off is handled separately</li>
  * </ul>
  */
 @Getter
-public class AviationClientException extends AviationApiException {
+public class AviationClientException extends RuntimeException {
 
     private final int httpStatus;
 

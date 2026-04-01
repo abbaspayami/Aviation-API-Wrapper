@@ -33,17 +33,78 @@ public class GlobalExceptionHandler {
         );
     }
 
-    @ExceptionHandler(AviationApiException.class)
-    public ResponseEntity<ErrorResponse> handleAviationApiError(
-            AviationApiException ex, HttpServletRequest request) {
+    /**
+     * Handles 4xx responses received from an upstream provider.
+     *
+     * <p>{@link AviationClientException} means <em>we</em> sent an invalid request
+     * to the upstream — wrong base URL, expired token, malformed parameter, etc.
+     * This is always a misconfiguration on our side; the upstream correctly rejected us.
+     * The end user is NOT informed of the upstream detail — they receive a clean
+     * {@code 502 Bad Gateway} because, as far as they are concerned, we (the gateway)
+     * failed to obtain a valid response from the data provider.
+     *
+     * <p>Why {@code 502} and not {@code 503}:
+     * {@code 502} means "I am a gateway and I could not get a valid response from
+     * upstream." {@code 503} means "I myself am overloaded or down." The problem
+     * here is the upstream integration, not our server — so {@code 502} is accurate.
+     *
+     * <p>Why kept separate from {@link #handleAviationApiError}:
+     * Both return {@code 502}, but this handler logs at {@code ERROR} — a 4xx from
+     * upstream is a misconfiguration that will break <em>every</em> request until
+     * a developer fixes it.  {@link AviationApiException} (5xx) logs at {@code WARN}
+     * because it is transient and may self-heal.  The distinction matters for
+     * on-call alerting rules.
+     *
+     * <p>This exception is NOT retried and does NOT count toward the circuit-breaker
+     * failure rate (both enforced in {@code application.yml} via the type hierarchy).
+     */
+    @ExceptionHandler(AviationClientException.class)
+    public ResponseEntity<ErrorResponse> handleAviationClientError(
+            AviationClientException ex, HttpServletRequest request) {
 
-        log.error("Upstream API error — path: {} message: {}", request.getRequestURI(), ex.getMessage());
+        // Log at ERROR — needs immediate dev attention; every request will fail
+        // until the underlying misconfiguration is corrected.
+        log.error("Upstream integration error (HTTP {}) — the provider rejected our request. " +
+                  "This is a misconfiguration, not a transient failure. " +
+                  "path: {} detail: {}",
+                  ex.getHttpStatus(), request.getRequestURI(), ex.getMessage());
 
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(
                 ErrorResponse.builder()
                         .status(HttpStatus.BAD_GATEWAY.value())
                         .error("Bad Gateway")
-                        .message(ex.getMessage())
+                        .message("Unable to retrieve aviation data at this time. Please try again later.")
+                        .path(request.getRequestURI())
+                        .timestamp(LocalDateTime.now())
+                        .build()
+        );
+    }
+
+    /**
+     * Handles 5xx / transient errors received from an upstream provider.
+     *
+     * <p>{@link AviationApiException} is thrown when the upstream server itself
+     * is degraded — it returned a 5xx status, timed out, or was unreachable.
+     * This is a temporary condition; the Retry aspect already attempted up to
+     * 3 calls with exponential back-off before this handler is reached.
+     *
+     * <p>Logged at {@code WARN} (not {@code ERROR}) because the problem is in the
+     * upstream provider, not in our code.  If it persists, the circuit breaker
+     * will open automatically and surface as a {@code 503} via
+     * {@link #handleCircuitBreakerOpen}.
+     */
+    @ExceptionHandler(AviationApiException.class)
+    public ResponseEntity<ErrorResponse> handleAviationApiError(
+            AviationApiException ex, HttpServletRequest request) {
+
+        log.warn("Upstream server error (transient) — path: {} detail: {}",
+                 request.getRequestURI(), ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(
+                ErrorResponse.builder()
+                        .status(HttpStatus.BAD_GATEWAY.value())
+                        .error("Bad Gateway")
+                        .message("Unable to retrieve aviation data at this time. Please try again later.")
                         .path(request.getRequestURI())
                         .timestamp(LocalDateTime.now())
                         .build()
