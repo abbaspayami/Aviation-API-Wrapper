@@ -21,18 +21,26 @@ import java.util.UUID;
  * produced by any subsequent filter, service, or handler includes the
  * correlation ID automatically via SLF4J MDC.
  *
- * <p><b>What it does:</b>
- * <ol>
- *   <li>Reads the {@code X-Correlation-ID} request header if provided by
- *       the caller (useful for end-to-end distributed tracing).</li>
- *   <li>Generates a UUID if no header was supplied.</li>
- *   <li>Stores the ID in {@link MDC} under the key {@code "correlationId"}.</li>
- *   <li>Echoes the ID back in the response header so callers can match
- *       their own logs to server-side log lines.</li>
- *   <li>Clears the MDC entry in a {@code finally} block — critical for
- *       Tomcat thread-pool reuse. Without cleanup, a reused thread would
- *       carry the previous request's ID into the next request.</li>
- * </ol>
+ * <h3>ID generation strategy</h3>
+ * <p>A fresh UUID is <strong>always</strong> generated internally — never taken
+ * directly from the caller. This guarantees:
+ * <ul>
+ *   <li>Consistent UUID format in every log line.</li>
+ *   <li>No log-injection risk from malicious or malformed header values.</li>
+ *   <li>Uniqueness — callers cannot collide with or spoof an existing ID.</li>
+ * </ul>
+ *
+ * <h3>External trace ID (distributed tracing)</h3>
+ * <p>If the caller supplies an {@code X-Correlation-ID} header (e.g. from an
+ * upstream gateway or another service), it is stored separately in MDC under
+ * {@code "externalTraceId"} — never used as our own internal ID. This lets
+ * operators cross-reference the caller's trace chain without trusting the
+ * caller's value as our own identifier.
+ *
+ * <h3>Thread safety</h3>
+ * <p>MDC entries are cleared in a {@code finally} block — critical for
+ * Tomcat thread-pool reuse. Without cleanup, a reused thread would carry
+ * the previous request's ID into the next request.
  *
  * <p>The MDC key {@code "correlationId"} is referenced in the log pattern:
  * <pre>
@@ -43,11 +51,17 @@ import java.util.UUID;
 @Order(0)
 public class CorrelationIdFilter extends OncePerRequestFilter {
 
-    /** Header name read from incoming requests and echoed in responses. */
+    /** Header name echoed back in responses so callers can match their logs to ours. */
     public static final String CORRELATION_ID_HEADER = "X-Correlation-ID";
 
-    /** MDC key used in the log pattern: {@code %X{correlationId}}. */
-    private static final String MDC_KEY = "correlationId";
+    /** MDC key for our internally generated ID — appears in every log line. */
+    private static final String MDC_KEY              = "correlationId";
+
+    /**
+     * MDC key for the caller-supplied ID — stored separately for cross-system
+     * tracing, never used as our own internal correlation ID.
+     */
+    private static final String MDC_EXTERNAL_KEY     = "externalTraceId";
 
     @Override
     protected void doFilterInternal(HttpServletRequest  request,
@@ -55,24 +69,28 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
                                     FilterChain         filterChain)
             throws ServletException, IOException {
 
-        // Use the caller-supplied ID if present (supports distributed tracing),
-        // otherwise generate a new UUID for this request.
-        String correlationId = request.getHeader(CORRELATION_ID_HEADER);
-        if (!StringUtils.hasText(correlationId)) {
-            correlationId = UUID.randomUUID().toString();
+        // Always generate a fresh UUID — guaranteed format, guaranteed uniqueness,
+        // no dependency on caller input. This is our internal correlation ID.
+        String internalId = UUID.randomUUID().toString();
+        MDC.put(MDC_KEY, internalId);
+
+        // If the caller provided their own trace ID (e.g. from an upstream gateway),
+        // store it separately. Never used as our ID — only for cross-system correlation.
+        String externalId = request.getHeader(CORRELATION_ID_HEADER);
+        if (StringUtils.hasText(externalId)) {
+            MDC.put(MDC_EXTERNAL_KEY, externalId);
         }
 
-        MDC.put(MDC_KEY, correlationId);
-
-        // Echo back so the caller can match their logs to ours.
-        response.setHeader(CORRELATION_ID_HEADER, correlationId);
+        // Echo OUR generated ID back so callers can match their request to our logs.
+        response.setHeader(CORRELATION_ID_HEADER, internalId);
 
         try {
             filterChain.doFilter(request, response);
         } finally {
-            // Always remove — prevents the ID from leaking into the next
-            // request handled by the same Tomcat worker thread.
+            // Always remove both entries — prevents IDs from leaking into the
+            // next request handled by the same Tomcat worker thread.
             MDC.remove(MDC_KEY);
+            MDC.remove(MDC_EXTERNAL_KEY);
         }
     }
 }

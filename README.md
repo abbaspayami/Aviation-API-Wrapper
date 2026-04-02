@@ -109,8 +109,9 @@ GET /api/v1/airports/EGLL
         │
         ▼
 CorrelationIdFilter (Order 0)
-  Reads X-Correlation-ID header or generates UUID → stores in MDC
-  Every log line for this request includes the ID automatically
+  Always generates a fresh internal UUID → stored in MDC as correlationId
+  Caller's X-Correlation-ID (if present) stored separately as externalTraceId
+  Every log line for this request includes the internal UUID automatically
         │
         ▼
 ApiKeyAuthFilter (Order 1)
@@ -299,12 +300,16 @@ all log entries, even in a multi-instance deployment.
 **How it works:**
 
 1. `CorrelationIdFilter` (`@Order(0)`) runs before all other filters.
-2. It reads the `X-Correlation-ID` request header if the caller provides one
-   (useful for end-to-end distributed tracing).
-3. If not provided, a new UUID is generated.
-4. The ID is stored in **SLF4J MDC** under the key `correlationId`.
-5. The ID is echoed back in the `X-Correlation-ID` response header.
-6. The MDC entry is **always cleared** in a `finally` block — critical for Tomcat
+2. A **fresh UUID is always generated internally** — never taken from the caller.
+   This guarantees consistent UUID format in every log line and eliminates
+   log-injection risk from malformed or malicious header values.
+3. The internal UUID is stored in **SLF4J MDC** under the key `correlationId`.
+4. The internal UUID is echoed back in the `X-Correlation-ID` response header
+   so the caller knows exactly which ID to search for in server logs.
+5. If the caller sends an `X-Correlation-ID` header (e.g. from an upstream gateway),
+   it is stored separately in MDC under `externalTraceId` — preserved for
+   cross-system correlation but never used as our own internal ID.
+6. Both MDC entries are **always cleared** in a `finally` block — critical for Tomcat
    thread-pool reuse (prevents the previous request's ID from leaking into the next request).
 
 **Log pattern** (configured in `application.yml`):
@@ -312,13 +317,15 @@ all log entries, even in a multi-instance deployment.
 2026-03-23 10:30:00 [a1b2c3d4-e5f6-...] INFO  c.s.a.s.i.AirportServiceImpl - Cache miss — fetching...
 ```
 
-**Pass your own ID (distributed tracing):**
+**Distributed tracing — pass your upstream trace ID:**
 ```bash
 curl -H "X-API-Key: sporty-dev-key-abc123" \
-     -H "X-Correlation-ID: my-trace-id-123" \
+     -H "X-Correlation-ID: upstream-trace-id-123" \
      http://localhost:8080/api/v1/airports/EGLL
 ```
-The same ID appears in the response header and in all server-side logs for that request.
+The response `X-Correlation-ID` header contains **our generated UUID** (not the caller's value).
+Server logs include both `[our-uuid]` (correlationId) and `externalTraceId=upstream-trace-id-123`
+so both systems can be cross-referenced without trusting the caller's format.
 
 ---
 
@@ -753,7 +760,7 @@ When running with Docker: use `http://localhost/…` (port 80, via Nginx).
 | `AirportControllerTest` | Web layer (MockMvc) | `200 OK` with clean `AirportResponse` fields; `401` on missing/invalid key; `429` on rate limit; `404` on unknown ICAO; `400` on invalid format; swagger/api-docs bypass auth |
 | `ApiKeyAuthFilterTest` | Unit (Mockito) | Missing/empty/invalid key → `401`; valid key passes; actuator, swagger-ui, api-docs bypass auth |
 | `RateLimitFilterTest` | Unit (Mockito) | Lua script called once per request; separate `expire()` never called; under-limit passes; `429` with `Retry-After`; rate-limit headers present; Redis down → fail-open; actuator/swagger/api-docs bypass |
-| `CorrelationIdFilterTest` | Unit (Mockito) | UUID generated when no header; caller-supplied ID reused; ID echoed in response header; MDC cleared after request; filter chain always called |
+| `CorrelationIdFilterTest` | Unit (Mockito) | Fresh UUID always generated regardless of caller header; caller ID stored as `externalTraceId` not used as internal ID; our UUID echoed in response header; MDC cleared after request; filter chain always called |
 | `AviationWeatherFeignClientTest` | Integration (WireMock) | Full JSON deserialization; empty list on unknown ICAO; `AviationApiException` on 500/429 |
 
 > **Note on resilience tests:** `@Retry` and `@CircuitBreaker` are AOP proxies — they are
@@ -1020,9 +1027,10 @@ Grafana auto-provisions Prometheus as a datasource on startup.
 
 ### Correlation IDs in logs
 
-Every log line includes `[correlationId]` from SLF4J MDC.
-Pass `X-Correlation-ID: my-trace-id` in the request to correlate server logs with your
-own client-side traces.
+Every log line includes `[correlationId]` from SLF4J MDC — always a freshly generated
+internal UUID, never a caller-supplied value. If the caller sends an `X-Correlation-ID`
+header, it is stored separately as `externalTraceId` in MDC for cross-system correlation.
+The response `X-Correlation-ID` header always contains our generated UUID.
 
 ```
 2026-03-23 10:30:00 [a1b2c3d4-e5f6-7890-...] INFO  c.s.a.s.i.AirportServiceImpl - Cache miss — fetching from primary API for ICAO: EGLL

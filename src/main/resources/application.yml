@@ -245,11 +245,12 @@ springdoc:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging
-#   Bug 4 fix: include [correlationId] in every log line via MDC.
-#   CorrelationIdFilter (Order 0) injects the ID from the X-Correlation-ID
-#   request header (or generates a UUID) and stores it in MDC before any
-#   other filter or handler runs. The ":-no-id" suffix is the default value
-#   shown when MDC is empty (e.g. background threads, startup logs).
+#   CorrelationIdFilter (Order 0) always generates a fresh internal UUID and
+#   stores it in MDC under "correlationId" before any other filter runs.
+#   If the caller sends X-Correlation-ID it is stored separately as "externalTraceId"
+#   but never used as our own ID — guarantees consistent UUID format and prevents
+#   log injection. The ":-no-id" suffix is the default shown when MDC is empty
+#   (e.g. background threads, startup logs).
 #
 #   Example log line:
 #   2026-03-23 10:30:00 [a1b2c3d4-...] INFO  c.s.a.s.i.AirportServiceImpl - Cache miss ...

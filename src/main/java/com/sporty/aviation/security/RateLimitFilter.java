@@ -90,7 +90,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper        objectMapper;
 
-    @Value("${security.rate-limit.requests-per-minute:60}")
+    @Value("${security.rate-limit.requests-per-minute}")
     private int requestsPerMinute;
 
     @Override
