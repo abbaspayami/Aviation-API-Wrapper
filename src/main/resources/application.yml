@@ -113,15 +113,23 @@ resilience4j:
         automatic-transition-from-open-to-half-open-enabled: true
 
         # These exceptions count as failures toward the failure rate.
+        #   AviationApiException   : upstream returned 5xx — real server-side failure
+        #   IOException            : network-level failure (connection reset, broken pipe, SSL)
+        #   feign.RetryableException : Feign's wrapper for full connectivity loss
+        #                             (connection refused, DNS failure). Extends RuntimeException,
+        #                             NOT IOException — must be listed explicitly or the CB
+        #                             never sees connectivity outages as failures.
         record-exceptions:
           - com.sporty.aviation.exception.AviationApiException
           - java.io.IOException
+          - feign.RetryableException
 
         # These exceptions are NOT infrastructure failures — do not penalise the CB.
         #   AirportNotFoundException : valid "not found" business result
-        #   AviationClientException  : permanent 4xx (e.g. 404 endpoint moved, 429 rate-limit);
-        #                              a 404 does not mean the API is down — the circuit
-        #                              must not open just because a URL changed.
+        #   AviationClientException  : permanent 4xx (e.g. 400 bad request, 404 endpoint moved);
+        #                              these indicate a misconfiguration on our side —
+        #                              the upstream is healthy, we sent a bad request.
+        #                              The circuit must not open for our own config bugs.
         ignore-exceptions:
           - com.sporty.aviation.exception.AirportNotFoundException
           - com.sporty.aviation.exception.AviationClientException
@@ -142,6 +150,7 @@ resilience4j:
         record-exceptions:
           - com.sporty.aviation.exception.AviationApiException
           - java.io.IOException
+          - feign.RetryableException
         ignore-exceptions:
           - com.sporty.aviation.exception.AirportNotFoundException
           - com.sporty.aviation.exception.AviationClientException
@@ -176,9 +185,9 @@ resilience4j:
 
         # Never retry on these — the result will not change on a second attempt.
         #   AirportNotFoundException  : valid "not found" business result
-        #   AviationClientException   : permanent 4xx from upstream (400/404/429);
-        #                               retrying a 404 wastes 7 s (1s+2s+4s backoff)
-        #                               and will never produce a different answer.
+        #   AviationClientException   : permanent 4xx from upstream (e.g. 400 bad request,
+        #                               404 endpoint moved); retrying wastes 3 s of backoff
+        #                               (1 s + 2 s exponential) and always produces the same rejection.
         ignore-exceptions:
           - com.sporty.aviation.exception.AirportNotFoundException
           - com.sporty.aviation.exception.AviationClientException

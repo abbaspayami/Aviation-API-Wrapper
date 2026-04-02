@@ -31,8 +31,8 @@ import java.time.Duration;
  * <p>Other decisions:
  * <ul>
  *   <li><b>TTL</b> — every cache entry expires after {@code aviation.cache.ttl-minutes}
- *       (default 10 min). When it expires the next caller fetches fresh data from the
- *       Aviation Weather API and the result is cached again automatically.</li>
+ *       (configured in {@code application.yml}). When it expires the next caller
+ *       fetches fresh data from the Aviation Weather API and re-populates the cache.</li>
  *   <li><b>Serialisation</b> — values are stored as JSON (not Java binary).
  *       JSON is human-readable in Redis CLI / RedisInsight and survives app restarts
  *       even if the JVM serialVersionUID changes.</li>
@@ -41,7 +41,7 @@ import java.time.Duration;
 @Configuration
 public class RedisConfig implements CachingConfigurer {
 
-    @Value("${aviation.cache.ttl-minutes:10}")
+    @Value("${aviation.cache.ttl-minutes}")
     private long ttlMinutes;
 
     @Bean
