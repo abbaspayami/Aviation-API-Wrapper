@@ -1,0 +1,56 @@
+# =============================================================================
+# ConfigMap — aviation-config
+# =============================================================================
+# Holds all NON-SENSITIVE configuration for the Spring Boot application.
+# Sensitive values (API keys, tokens) go in Secret (03-secret.yaml).
+#
+# Spring Boot reads these as environment variables and maps them to
+# application.yml properties via relaxed binding:
+#   SPRING_DATA_REDIS_HOST  →  spring.data.redis.host
+#   AVIATION_CACHE_TTL_MINUTES  →  aviation.cache.ttl-minutes
+#   etc.
+#
+# To apply changes without redeploying:
+#   kubectl apply -f k8s/02-configmap.yaml
+#   kubectl rollout restart deployment/aviation-api-wrapper -n aviation
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aviation-config
+  namespace: aviation
+  labels:
+    app.kubernetes.io/part-of: aviation-api-wrapper
+data:
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  # "aviation-redis" is the Kubernetes Service name defined in 05-redis-service.yaml.
+  # Inside a namespace, services are reachable by their name alone.
+  SPRING_DATA_REDIS_HOST: "aviation-redis"
+  SPRING_DATA_REDIS_PORT: "6379"
+
+  # ── Server ─────────────────────────────────────────────────────────────────
+  SERVER_PORT: "8080"
+
+  # ── Primary API ────────────────────────────────────────────────────────────
+  AVIATION_API_BASE_URL: "https://aviationweather.gov/api/data"
+
+  # ── Cache ──────────────────────────────────────────────────────────────────
+  AVIATION_CACHE_TTL_MINUTES: "10"
+
+  # ── Fallback provider (AirportDB) ──────────────────────────────────────────
+  AVIATION_PROVIDER2_BASE_URL: "https://airportdb.io/api/v1"
+
+  # ── Rate limiting ──────────────────────────────────────────────────────────
+  SECURITY_RATE_LIMIT_REQUESTS_PER_MINUTE: "60"
+
+  # ── Kubernetes health probes ────────────────────────────────────────────────
+  # Explicitly enables /actuator/health/liveness and /actuator/health/readiness.
+  # Spring Boot auto-enables these when it detects KUBERNETES_SERVICE_HOST,
+  # but setting it explicitly avoids any ambiguity.
+  MANAGEMENT_HEALTH_PROBES_ENABLED: "true"
+
+  # ── Graceful shutdown ───────────────────────────────────────────────────────
+  # When Kubernetes sends SIGTERM, Spring Boot stops accepting new requests and
+  # waits up to 30 s for in-flight requests to finish before the process exits.
+  # Must be less than terminationGracePeriodSeconds in the Deployment (60 s).
+  SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE: "30s"

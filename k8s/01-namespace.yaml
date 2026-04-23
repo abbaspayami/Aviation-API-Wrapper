@@ -1,0 +1,15 @@
+# =============================================================================
+# Namespace — aviation
+# =============================================================================
+# All Kubernetes resources for this project live inside this namespace.
+# Benefits:
+#   - Isolation : resources cannot accidentally collide with other projects
+#   - RBAC      : you can grant permissions scoped to this namespace only
+#   - Cleanup   : `kubectl delete namespace aviation` removes everything at once
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aviation
+  labels:
+    app.kubernetes.io/part-of: aviation-api-wrapper

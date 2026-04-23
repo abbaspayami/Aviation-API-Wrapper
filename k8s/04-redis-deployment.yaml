@@ -1,0 +1,64 @@
+# =============================================================================
+# Redis — Deployment
+# =============================================================================
+# Single Redis instance shared by all app pods for:
+#   - Airport cache  (Spring @Cacheable, TTL 10 min)
+#   - Rate-limit counters  (Redis INCR per API key per minute)
+#
+# replicas: 1 — Redis does not support multi-master out of the box.
+#   For production, replace this with a Redis Sentinel or Redis Cluster setup,
+#   or use a managed service (AWS ElastiCache, GCP Memorystore).
+#
+# No PersistentVolumeClaim — the cache and rate-limit counters are ephemeral.
+#   A pod restart simply means:
+#     - Next airport lookup hits the upstream API once (then re-caches).
+#     - Rate-limit windows reset (acceptable for this workload).
+#   Add a PVC if you need durability.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aviation-redis
+  namespace: aviation
+  labels:
+    app: aviation-redis
+    app.kubernetes.io/part-of: aviation-api-wrapper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aviation-redis
+  template:
+    metadata:
+      labels:
+        app: aviation-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+
+          # Liveness — restart the container if Redis stops responding to PING.
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # Readiness — only send traffic once Redis is ready to accept commands.
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"

@@ -1,0 +1,70 @@
+# =============================================================================
+# Ingress
+# =============================================================================
+# An Ingress is a K8s object that defines HTTP routing rules.
+# The actual work is done by the Ingress Controller — a cluster-level component
+# (usually Nginx or Traefik) that watches Ingress objects and configures itself.
+#
+# This replaces the custom Nginx pod from docker-compose entirely.
+# The Ingress Controller already handles:
+#   - Load balancing across all ready app pods
+#   - X-Real-IP / X-Forwarded-For headers
+#   - Passive health checking (via readiness probes — unhealthy pods are
+#     automatically removed from the Service endpoints)
+#   - Timeout configuration (via annotations below)
+#
+# Prerequisites — install the Nginx Ingress Controller once per cluster:
+#
+#   minikube:
+#     minikube addons enable ingress
+#
+#   Any cluster (cloud or local):
+#     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.0/deploy/static/provider/cloud/deploy.yaml
+#
+# After applying, check it is running:
+#   kubectl get pods -n ingress-nginx
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aviation-ingress
+  namespace: aviation
+  labels:
+    app.kubernetes.io/part-of: aviation-api-wrapper
+  annotations:
+    # ── Timeouts ─────────────────────────────────────────────────────────────
+    # Match the app's full retry chain:
+    # 3 attempts × (3s connect + 10s read + 4s backoff) ≈ 51s worst case.
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
+    nginx.ingress.kubernetes.io/proxy-read-timeout:    "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout:    "60"
+
+    # ── Headers ───────────────────────────────────────────────────────────────
+    # Forward the real client IP to the app so it appears correctly in logs
+    # and in the rate-limit filter (which uses the API key, not the IP —
+    # but real IP is still useful for audit logs).
+    nginx.ingress.kubernetes.io/use-forwarded-headers:     "true"
+    nginx.ingress.kubernetes.io/compute-full-forwarded-for: "true"
+
+spec:
+  # ── Ingress Controller class ────────────────────────────────────────────────
+  # ingressClassName replaces the deprecated kubernetes.io/ingress.class annotation
+  # (removed in Kubernetes 1.22+).
+  # "nginx" refers to the IngressClass created by the Nginx Ingress Controller
+  # when you install it (minikube addons enable ingress, or the official manifest).
+  ingressClassName: nginx
+
+  rules:
+    # ── HTTP routing ──────────────────────────────────────────────────────────
+    # All traffic (any host, any path) → aviation-api-wrapper Service → pods.
+    # To restrict to a specific domain, replace the empty host with e.g.:
+    #   host: aviation.example.com
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aviation-api-wrapper   # ClusterIP Service in 07-app-service.yaml
+                port:
+                  number: 8080

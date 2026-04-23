@@ -1,0 +1,27 @@
+# =============================================================================
+# App — Service (ClusterIP)
+# =============================================================================
+# Makes the app pods reachable inside the cluster under "aviation-api-wrapper".
+# Nginx uses this name as its upstream target (see 09-nginx-configmap.yaml).
+#
+# ClusterIP — not exposed outside the cluster.
+# External traffic enters only through the Nginx LoadBalancer (11-nginx-service.yaml).
+#
+# Kubernetes automatically round-robins requests across all ready pods
+# that match the selector label (app: aviation-api-wrapper).
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: aviation-api-wrapper
+  namespace: aviation
+  labels:
+    app: aviation-api-wrapper
+    app.kubernetes.io/part-of: aviation-api-wrapper
+spec:
+  type: ClusterIP
+  selector:
+    app: aviation-api-wrapper    # routes to all pods with this label
+  ports:
+    - port: 8080
+      targetPort: 8080

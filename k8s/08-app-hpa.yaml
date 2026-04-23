@@ -1,0 +1,43 @@
+# =============================================================================
+# App — HorizontalPodAutoscaler (HPA)
+# =============================================================================
+# Automatically scales the number of app pods between 2 and 5
+# based on average CPU utilization across all pods.
+#
+# How it works:
+#   - Every 15 s the HPA controller checks the average CPU of all pods.
+#   - If average CPU > 70%  → add pods (up to maxReplicas: 5).
+#   - If average CPU < 70%  → remove pods (down to minReplicas: 2).
+#   - Scale-up   is fast  (default stabilization window: 0 s).
+#   - Scale-down is slow  (default stabilization window: 300 s)
+#     to avoid flapping when load briefly drops.
+#
+# Prerequisite: the Metrics Server must be installed in the cluster.
+#   Install on a local cluster (minikube/kind):
+#     kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+#   minikube:
+#     minikube addons enable metrics-server
+# =============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aviation-api-wrapper-hpa
+  namespace: aviation
+  labels:
+    app.kubernetes.io/part-of: aviation-api-wrapper
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aviation-api-wrapper
+
+  minReplicas: 2   # always keep at least 2 pods for high availability
+  maxReplicas: 5   # never exceed 5 pods
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70   # scale up when avg CPU across pods exceeds 70 %

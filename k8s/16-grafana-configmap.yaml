@@ -1,0 +1,24 @@
+# =============================================================================
+# Grafana — ConfigMap (datasource provisioning)
+# =============================================================================
+# Grafana reads this file at startup and automatically creates the
+# Prometheus datasource — no manual UI configuration needed.
+# The URL uses the Kubernetes Service name "aviation-prometheus".
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aviation-grafana-config
+  namespace: aviation
+  labels:
+    app: aviation-grafana
+    app.kubernetes.io/part-of: aviation-api-wrapper
+data:
+  prometheus.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://aviation-prometheus:9090
+        access: proxy
+        isDefault: true

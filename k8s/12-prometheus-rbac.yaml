@@ -1,0 +1,54 @@
+# =============================================================================
+# Prometheus — RBAC
+# =============================================================================
+# Prometheus uses Kubernetes Service Discovery (kubernetes_sd_configs) to
+# automatically find all pods with the annotation:
+#   prometheus.io/scrape: "true"
+#
+# To read pod metadata from the Kubernetes API, Prometheus needs a
+# ServiceAccount with read permissions on pods and endpoints.
+#
+# ServiceAccount  — identity that Prometheus runs as inside the cluster
+# ClusterRole     — defines what the identity is allowed to read
+# ClusterRoleBinding — binds the role to the service account
+# =============================================================================
+
+# ── ServiceAccount ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aviation-prometheus
+  namespace: aviation
+  labels:
+    app.kubernetes.io/part-of: aviation-api-wrapper
+
+---
+# ── ClusterRole ───────────────────────────────────────────────────────────────
+# Read-only access to pod and endpoint metadata — nothing more.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aviation-prometheus
+  labels:
+    app.kubernetes.io/part-of: aviation-api-wrapper
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ── ClusterRoleBinding ────────────────────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aviation-prometheus
+  labels:
+    app.kubernetes.io/part-of: aviation-api-wrapper
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aviation-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: aviation-prometheus
+    namespace: aviation

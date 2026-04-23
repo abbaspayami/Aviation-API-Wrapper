@@ -1,0 +1,117 @@
+# =============================================================================
+# App — Deployment
+# =============================================================================
+# Runs 2 replicas of the Aviation API Wrapper (same as docker-compose).
+# Both pods share the single Redis Service for cache and rate limiting.
+#
+# Rolling update strategy (maxUnavailable: 0, maxSurge: 1):
+#   Kubernetes starts one new pod, waits for it to pass readiness,
+#   then terminates one old pod — zero downtime during deploys.
+#
+# Image:
+#   Replace "aviation-api-wrapper:latest" with your registry path, e.g.:
+#     ghcr.io/<your-org>/aviation-api-wrapper:1.0.0
+#   Build and push with:
+#     docker build -t ghcr.io/<your-org>/aviation-api-wrapper:1.0.0 .
+#     docker push ghcr.io/<your-org>/aviation-api-wrapper:1.0.0
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aviation-api-wrapper
+  namespace: aviation
+  labels:
+    app: aviation-api-wrapper
+    app.kubernetes.io/part-of: aviation-api-wrapper
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aviation-api-wrapper
+
+  # Rolling update — bring up a new pod before taking down an old one.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0   # never reduce capacity below 2 during a deploy
+      maxSurge: 1         # allow 1 extra pod (3 total) while rolling out
+
+  template:
+    metadata:
+      labels:
+        app: aviation-api-wrapper
+      annotations:
+        # Prometheus pod annotations — tells Prometheus to scrape this pod.
+        # Used by the kubernetes_sd_configs in 12-prometheus-configmap.yaml.
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "8080"
+        prometheus.io/path:   "/actuator/prometheus"
+
+    spec:
+      # Spread pods across different nodes so one node failure
+      # does not take both replicas down at the same time.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: aviation-api-wrapper
+
+      containers:
+        - name: aviation-api-wrapper
+          image: aviation-api-wrapper:latest   # built into minikube via: eval $(minikube docker-env) && docker build -t aviation-api-wrapper:latest .
+          imagePullPolicy: IfNotPresent        # use local image in dev; Always in production
+
+          ports:
+            - containerPort: 8080
+
+          # Load all non-sensitive config from ConfigMap and sensitive values from Secret.
+          # Both are merged into the container environment.
+          envFrom:
+            - configMapRef:
+                name: aviation-config
+            - secretRef:
+                name: aviation-secret
+
+          # ── Liveness probe ──────────────────────────────────────────────────
+          # Kubernetes restarts the container if this fails 3 times.
+          # /actuator/health/liveness returns UP as long as the Spring context is alive.
+          # It does NOT check Redis or external APIs — if they're down the app is
+          # still alive and should not be restarted.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30   # Spring Boot needs ~15s; give it extra margin
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # ── Readiness probe ─────────────────────────────────────────────────
+          # Kubernetes stops sending traffic to this pod if this fails.
+          # /actuator/health/readiness returns UP only when Redis is reachable
+          # and the app is ready to serve requests.
+          # A pod can be live (not restarted) but not ready (no traffic sent).
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            failureThreshold: 3
+
+          # ── Resource limits ─────────────────────────────────────────────────
+          # requests: what Kubernetes reserves on the node for scheduling.
+          # limits:   hard cap — container is killed if it exceeds memory limit.
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+      # Give in-flight requests up to 60 s to finish after SIGTERM.
+      # Spring Boot's graceful shutdown (SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE=30s)
+      # must be shorter than this value.
+      terminationGracePeriodSeconds: 60

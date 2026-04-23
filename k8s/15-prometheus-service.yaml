@@ -1,0 +1,21 @@
+# =============================================================================
+# Prometheus — Service (ClusterIP)
+# =============================================================================
+# Makes Prometheus reachable inside the cluster as "aviation-prometheus:9090".
+# Grafana uses this name as its datasource URL.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: aviation-prometheus
+  namespace: aviation
+  labels:
+    app: aviation-prometheus
+    app.kubernetes.io/part-of: aviation-api-wrapper
+spec:
+  type: ClusterIP
+  selector:
+    app: aviation-prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090

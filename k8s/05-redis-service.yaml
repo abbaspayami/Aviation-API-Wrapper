@@ -1,0 +1,24 @@
+# =============================================================================
+# Redis — Service (ClusterIP)
+# =============================================================================
+# Makes Redis reachable inside the cluster under the DNS name "aviation-redis".
+# This name matches SPRING_DATA_REDIS_HOST in 02-configmap.yaml.
+#
+# ClusterIP means the service is only reachable from inside the cluster —
+# Redis is never exposed to the outside world.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: aviation-redis
+  namespace: aviation
+  labels:
+    app: aviation-redis
+    app.kubernetes.io/part-of: aviation-api-wrapper
+spec:
+  type: ClusterIP
+  selector:
+    app: aviation-redis         # routes traffic to the Redis pod
+  ports:
+    - port: 6379
+      targetPort: 6379

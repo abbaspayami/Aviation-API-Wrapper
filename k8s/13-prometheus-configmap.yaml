@@ -1,0 +1,63 @@
+# =============================================================================
+# Prometheus — ConfigMap (prometheus.yml)
+# =============================================================================
+# Uses Kubernetes Service Discovery (kubernetes_sd_configs) instead of
+# docker-compose's static IP list.
+#
+# How it works:
+#   1. Prometheus asks the K8s API: "give me all pods in namespace aviation"
+#   2. It keeps only pods annotated with prometheus.io/scrape: "true"
+#   3. It reads the port and path from the other annotations on each pod
+#   4. It scrapes /actuator/prometheus from EVERY matching pod individually
+#      — so both app pod-1 and pod-2 are scraped, not just the load-balanced service
+#
+# The app pod annotations are set in 06-app-deployment.yaml:
+#   prometheus.io/scrape: "true"
+#   prometheus.io/port:   "8080"
+#   prometheus.io/path:   "/actuator/prometheus"
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aviation-prometheus-config
+  namespace: aviation
+  labels:
+    app: aviation-prometheus
+    app.kubernetes.io/part-of: aviation-api-wrapper
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+
+    scrape_configs:
+
+      - job_name: aviation-api-wrapper
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - aviation
+
+        relabel_configs:
+          # 1. Keep only pods with prometheus.io/scrape: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+
+          # 2. Use the path from the annotation (e.g. /actuator/prometheus)
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+
+          # 3. Replace the default port with the one from the annotation (8080)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+
+          # 4. Add a label so Grafana can identify the app across pods
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: application

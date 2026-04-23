@@ -1,0 +1,66 @@
+# =============================================================================
+# Grafana — Deployment
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aviation-grafana
+  namespace: aviation
+  labels:
+    app: aviation-grafana
+    app.kubernetes.io/part-of: aviation-api-wrapper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aviation-grafana
+  template:
+    metadata:
+      labels:
+        app: aviation-grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          ports:
+            - containerPort: 3000
+
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"     # change this for any non-local environment
+
+          volumeMounts:
+            # Provisioning directory — Grafana scans this for datasource configs.
+            - name: grafana-config
+              mountPath: /etc/grafana/provisioning/datasources/prometheus.yml
+              subPath: prometheus.yml
+              readOnly: true
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+
+      volumes:
+        - name: grafana-config
+          configMap:
+            name: aviation-grafana-config
